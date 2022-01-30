@@ -137,7 +137,35 @@ static int add_rtcm_to_buff(rtcm_buff_t* rtcm, unsigned char data)
         rtcm->buff[rtcm->nbyte++]=data;
         return 0;
     }
-    rtcm->buff[rtcm->nbyte++]=data;
+    if (rtcm->mark)
+    {
+        if (data == 0xEE)
+        {
+            rtcm->buff[rtcm->nbyte++] = 0x11;
+        }
+        else if (data == 0xEC)
+        {
+            rtcm->buff[rtcm->nbyte++] = 0x13;
+        }
+        else if (data == 0x88)
+        {
+            rtcm->buff[rtcm->nbyte++] = 0x77;
+        }
+        else if ((rtcm->nbyte+2) < MAX_RTCM_BUF_LEN)
+        {
+            rtcm->buff[rtcm->nbyte++] = 0x77;
+            rtcm->buff[rtcm->nbyte++] = data;
+        }
+        rtcm->mark = 0;
+    }
+    else if (data == 0x77)
+    {
+        rtcm->mark = 1;
+    }
+    else
+    {
+        rtcm->buff[rtcm->nbyte++] = data;
+    }
     return 1;
 }
 

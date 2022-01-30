@@ -85,6 +85,7 @@ static void test_rtcm(const char* fname)
 int main(int argc, const char* argv[])
 {
     if (argc>1)
-    test_rtcm(argv[1]);
+        test_rtcm(argv[1]);
+    //test_rtcm("D:\\data\\rtklib_bin\\2022-1-29-20-19-37-COM8.bin");
 }
 

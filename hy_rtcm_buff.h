@@ -20,6 +20,7 @@ typedef struct {        /* RTCM control struct type */
 	int sync;
     int crc;
     int slen;
+    int mark;
     unsigned char sys;         /* update satellite of ephemeris */
     unsigned char prn;
 } rtcm_buff_t;
