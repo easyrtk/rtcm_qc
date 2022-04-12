@@ -137,6 +137,9 @@ static int add_rtcm_to_buff(rtcm_buff_t* rtcm, unsigned char data)
         rtcm->buff[rtcm->nbyte++]=data;
         return 0;
     }
+#if 1
+    rtcm->buff[rtcm->nbyte++] = data;
+#else
     if (rtcm->mark)
     {
         if (data == 0xEE)
@@ -166,6 +169,7 @@ static int add_rtcm_to_buff(rtcm_buff_t* rtcm, unsigned char data)
     {
         rtcm->buff[rtcm->nbyte++] = data;
     }
+#endif
     return 1;
 }
 
