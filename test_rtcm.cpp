@@ -32,7 +32,11 @@ static void test_rtcm(const char* fname)
         int ret = input_rtcm3_type(rtcm, (unsigned char)data);
         if (rtcm->type > 0) /* rtcm data */
         {
-            if (rtcm->crc == 1) ++numofcrc;
+            if (rtcm->crc == 1)
+            {
+                ++numofcrc;
+                continue;
+            }
             if (ret == 1)
             {
                 if (numofepoch > 0)
