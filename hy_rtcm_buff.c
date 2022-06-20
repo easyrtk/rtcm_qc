@@ -175,13 +175,14 @@ static int add_rtcm_to_buff(rtcm_buff_t* rtcm, unsigned char data)
 
 extern int input_rtcm3_type(rtcm_buff_t *rtcm, unsigned char data)
 {
-    int ret = 0, i = 24;
+    int ret = 0, i = 24, j = 0, mask = 0, is_obs = 0, nbyte = rtcm->nbyte;
     if (rtcm->sync == 0) rtcm->slen = 0;
     if (add_rtcm_to_buff(rtcm, data) == 0) return 0;
     
     if (rtcm->nbyte < 3) return 0;
     rtcm->len=getbitu(rtcm->buff,14,10)+3; /* length without parity */
     if (rtcm->nbyte<rtcm->len+3) return 0;
+    nbyte = rtcm->nbyte;
     rtcm->nbyte=0;
     i = 24;
     rtcm->type = getbitu(rtcm->buff, i, 12); i += 12;
@@ -196,6 +197,7 @@ extern int input_rtcm3_type(rtcm_buff_t *rtcm, unsigned char data)
         rtcm->tow   = getbitu(rtcm->buff, i, 30) * 0.001;   i += 30;
         rtcm->sync  = getbitu(rtcm->buff, i,  1);           i +=  1;
         ret = rtcm->sync?0:1;
+        is_obs = 1;
     }
     if (rtcm->type == 1084 || rtcm->type == 1085 || rtcm->type == 1086 || rtcm->type == 1087)
     {
@@ -211,6 +213,7 @@ extern int input_rtcm3_type(rtcm_buff_t *rtcm, unsigned char data)
         }
         rtcm->tow   = tow;
         ret = rtcm->sync?0:1;
+        is_obs = 1;
     }
     if (rtcm->type == 1124 || rtcm->type == 1125 || rtcm->type == 1126 || rtcm->type == 1127)
     {
@@ -221,6 +224,64 @@ extern int input_rtcm3_type(rtcm_buff_t *rtcm, unsigned char data)
         tow += 14.0; /* BDT -> GPST */
         rtcm->tow = tow;
         ret = rtcm->sync?0:1;
+        is_obs = 1;
+    }
+    if (is_obs)
+    {
+        memset(rtcm->sats, 0, sizeof(rtcm->sats));
+        memset(rtcm->sigs, 0, sizeof(rtcm->sigs));
+        memset(rtcm->cels, 0, sizeof(rtcm->cels));
+        rtcm->nsat = 0;
+        rtcm->nsig = 0;
+        rtcm->ncel = 0;
+        /* iod */      i += 3;
+        /* time_s*/    i += 7;
+        /* clk_str */  i += 2;
+        /* clk_ext */  i += 2;
+        /* smooth */   i += 1;
+        /* tint_s */   i += 3;
+        for (j = 1; j <= 64; j++) {
+            mask = getbitu(rtcm->buff, i, 1); i += 1;
+            if (mask) rtcm->sats[rtcm->nsat++] = j;
+        }
+        for (j = 1; j <= 32; j++) {
+            mask = getbitu(rtcm->buff, i, 1); i += 1;
+            if (mask) rtcm->sigs[rtcm->nsig++] = j;
+        }
+        if (i + rtcm->nsat * rtcm->nsig > rtcm->len * 8) {
+            /* error */
+            rtcm->nsat = rtcm->nsig = rtcm->ncel = 0;
+        }
+        else
+        {
+            for (j = 0; j < rtcm->nsat * rtcm->nsig; j++) {
+                rtcm->cels[j] = getbitu(rtcm->buff, i, 1); i += 1;
+                if (rtcm->cels[j]) rtcm->ncel++;
+            }
+        }
+#ifdef _WIN32
+        printf("%10.3f,%4i,%4i,%4i,%4i,%4i,%4i,SAT:", rtcm->tow, rtcm->type, nbyte, rtcm->len + 3, rtcm->nsat, rtcm->nsig, rtcm->ncel);
+        for (j = 0; j < 64; ++j)
+        {
+            if (rtcm->sats[j])
+            {
+                printf(",%2i", j + 1);
+            }
+        }
+        printf(",SIG:");
+        for (j = 0; j < 32; ++j)
+        {
+            if (rtcm->sigs[j])
+            {
+                printf(",%2i", j + 1);
+            }
+        }
+        printf("\n");
+#endif
+        /* MSM4 => nsat * (8  +10   ) + ncel * (15+22+ 4+1+ 6   ) = nsat *18 + ncel *48 */
+        /* MSM5 => nsat * (8+4+10+14) + ncel * (15+22+ 4+1+ 6+15) = nsat *36 + ncel *63 */
+        /* MSM6 => nsat * (8  +10   ) + ncel * (20+24+10+1+10   ) = nsat *18 + ncel *65 */
+        /* MSM7 => nsat * (8+4+10+14) + ncel * (20+24+10+1+10+15) = nsat *36 + ncel *80 */
     }
     if (rtcm->type == 1019)
     {
