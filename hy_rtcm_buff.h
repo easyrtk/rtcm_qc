@@ -13,6 +13,12 @@ typedef struct {        /* RTCM control struct type */
     int nbyte;          /* number of bytes in message buffer */ 
     int nbit;           /* number of bits in word buffer */ 
     int len;            /* message length (bytes) */
+    unsigned char nsat; /* number of satellites */
+    unsigned char nsig; /* number of signals */
+    unsigned char ncel; /* number of cell */
+    unsigned char sats[64];         /* satellites */
+    unsigned char sigs[32];         /* signals */
+    unsigned char cels[64];     /* cell mask */
     unsigned char buff[MAX_RTCM_BUF_LEN]; /* message buffer */
     unsigned short wk;
     double tow;
