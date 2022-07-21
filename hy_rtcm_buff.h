@@ -35,6 +35,7 @@ int input_rtcm3_type(rtcm_buff_t* rtcm, unsigned char data);
 
 int decode_type1005_(unsigned char* buff, int len, int* staid, double* pos);
 int decode_type1006_(unsigned char* buff, int len, int* staid, double* pos);
+int update_type_1005_1006_pos(uint8_t* buff, int nbyte, double* p);
 
 //void setbitu(unsigned char* buff, int pos, int len, unsigned int data);
 //unsigned int getbitu(const unsigned char* buff, int pos, int len);

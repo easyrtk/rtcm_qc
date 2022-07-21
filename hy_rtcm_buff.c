@@ -61,6 +61,19 @@ static void setbitu(unsigned char *buff, int pos, int len, unsigned int data)
         if (data&mask) buff[i/8]|=1u<<(7-i%8); else buff[i/8]&=~(1u<<(7-i%8));
     }
 }
+extern void setbits(uint8_t *buff, int pos, int len, int32_t data)
+{
+    if (data<0) data|=1<<(len-1); else data&=~(1<<(len-1)); /* set sign bit */
+    setbitu(buff,pos,len,(uint32_t)data);
+}
+/* set signed 38 bit field ---------------------------------------------------*/
+static void set38bits(uint8_t *buff, int pos, double value)
+{
+    int word_h=(int)floor(value/64.0);
+    uint32_t word_l=(uint32_t)(value-word_h*64.0);
+    setbits(buff,pos  ,32,word_h);
+    setbitu(buff,pos+32,6,word_l);
+}
 static unsigned int getbitu(const unsigned char *buff, int pos, int len)
 {
     unsigned int bits=0;
@@ -350,4 +363,43 @@ extern int rtcm_obs_type(int type)
 extern int rtcm_eph_type(int type)
 {
     return type == 1019 || type == 1020 || type == 1042 || type == 1044 || type == 1045 || type == 1046;
+}
+
+extern int update_type_1005_1006_pos(uint8_t* buff, int nbyte, double* p)
+{
+    int len = 0, i = 24, type = 0, staid = 0;
+    int crc = 0;
+    int ret = 0;
+    if (buff[0] != RTCM3PREAMB || nbyte < 6) return ret;
+    len = getbitu(buff, 14, 10) + 3; /* length without parity */
+    if (nbyte < (len + 3)) return ret;
+
+    i = 24; /* type */
+    type = getbitu(buff, i, 12); i += 12;
+
+    if (type == 1005 || type == 1006)
+    {
+        /* 24 + 12, staid */
+        i += 12; /* ref station id */
+        i += 6; /* itrf realization year */
+        i += 1; /* gps indicator */
+        i += 1; /* glonass indicator */
+        i += 1; /* galileo indicator */
+        i += 1; /* ref station indicator */
+        set38bits(buff, i, p[0] / 0.0001); i += 38; /* antenna ref point ecef-x */
+        i += 1; /* oscillator indicator */
+        i += 1; /* reserved */
+        set38bits(buff, i, p[1] / 0.0001); i += 38; /* antenna ref point ecef-y */
+        i += 2; /* quarter cycle indicator */
+        set38bits(buff, i, p[2] / 0.0001); i += 38; /* antenna ref point ecef-z */
+        if (type==1006)
+        {
+        setbitu  (buff, i, 16,       0.0); i += 16; /* antenna height */
+        }
+        /* crc-24q */
+        crc = crc24q(buff, len);
+        setbitu(buff, len * 8, 24, crc);
+        ret = 1;
+    }
+    return ret;
 }
