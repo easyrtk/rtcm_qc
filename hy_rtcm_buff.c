@@ -272,16 +272,22 @@ extern int input_rtcm3_type(rtcm_buff_t *rtcm, unsigned char data)
                 if (rtcm->cels[j]) rtcm->ncel++;
             }
         }
-#ifdef _WIN32
-        printf("%10.3f,%4i,%4i,%4i,%4i,%2i(", rtcm->tow, rtcm->type, nbyte, rtcm->len + 3, rtcm->ncel, rtcm->nsat);
-        for (j = 0; j < rtcm->nsat; ++j)
+#if 0 //_WIN32
+        printf("%10.3f,%4i,%4i,%4i,%4i,%4i,%4i,SAT:", rtcm->tow, rtcm->type, nbyte, rtcm->len + 3, rtcm->nsat, rtcm->nsig, rtcm->ncel);
+        for (j = 0; j < 64; ++j)
         {
-            printf("%2i%c", rtcm->sats[j], (j + 1) == rtcm->nsat ? ')' : ',');
+            if (rtcm->sats[j])
+            {
+                printf(",%2i", j + 1);
+            }
         }
-        printf(",%i[", rtcm->nsig);
-        for (j = 0; j < rtcm->nsig; ++j)
+        printf(",SIG:");
+        for (j = 0; j < 32; ++j)
         {
-            printf("%2i%c", rtcm->sigs[j], (j + 1) == rtcm->nsig ? ']' : ',');
+            if (rtcm->sigs[j])
+            {
+                printf(",%2i", j + 1);
+            }
         }
         printf("\n");
 #endif
