@@ -138,12 +138,15 @@ static void test_rtcm(const char* fname)
     rtcm_buff_t* rtcm = &gRTCM_Buf;
     unsigned long numofcrc = 0;
     unsigned long numofepoch = 0;
+    unsigned long numofepoch_bad = 0;
     double lastTime = 0.0;
     std::vector< rtcm_obs_t> vObsType;
     std::vector<xyz_t> vxyz;
 
     std::vector<std::string> vDataGapOutput;
     std::vector<std::string> vTypeGapOutput;
+    double start_time =-1;
+    double end_time = -1;
     while (!feof(fRTCM))
     {
         if ((data = fgetc(fRTCM)) == EOF) break;
@@ -155,19 +158,42 @@ static void test_rtcm(const char* fname)
                 ++numofcrc;
                 continue;
             }
+            if (rtcm_obs_type(rtcm->type))
+            {
+                if (start_time < 0) start_time = rtcm->tow;
+                end_time = rtcm->tow;
+                int hour = rtcm->tow / 3600;
+                double sec = rtcm->tow - 3600 * hour;
+                hour %= 24;
+                int mm = sec / 60;
+                sec -= mm * 60;
+                //printf("%10.3f,%2i,%2i,%2i,%4i,%4i,%4i\n", rtcm->tow, hour, mm, (int)sec, rtcm->type, rtcm->nbyte, numofepoch);
+            }
+            double dt = rtcm->tow - lastTime;
             if (ret == 1)
             {
                 if (numofepoch > 0)
                 {
-                    double dt = rtcm->tow - lastTime;
                     if (dt > 1.5 && rtcm_obs_type(rtcm->type))
                     {
                         char temp[255] = { 0 };
                         sprintf(temp, "%10.3f,%10.3f,%6i\r\n", rtcm->tow, dt, numofepoch);
                         vDataGapOutput.push_back(temp);
                     }
+                    if (dt < 0.8)
+                    {
+                        dt = dt;
+                        ++numofepoch_bad;
+                    }
+                    else
+                    {
+                        ++numofepoch;
+                    }
                 }
-                ++numofepoch;
+                else
+                {
+                    ++numofepoch;
+                }
                 lastTime = rtcm->tow;
             }
             if (ret == 5)
@@ -208,23 +234,10 @@ static void test_rtcm(const char* fname)
             }
         }
     }
-    printf("rtcm stats for %s\r\n", fname);
-    if (vDataGapOutput.size() > 0)
-    {
-        printf("Epoch Data GAP\n");
-        for (int i = 0; i < vDataGapOutput.size(); ++i)
-        {
-            printf("%s", vDataGapOutput[i].c_str());
-        }
-    }
-    if (vTypeGapOutput.size() > 0)
-    {
-        printf("RTCM TYPE GAP\n");
-        for (int i = 0; i < vTypeGapOutput.size(); ++i)
-        {
-            printf("%s", vTypeGapOutput[i].c_str());
-        }
-    }
+    if (end_time < start_time) end_time += 7 * 24 * 3600;
+    int total_epoch = (int)(end_time - start_time + 1);
+    printf("rtcm stats for %s,%10.3f,%10.3f,%i,%i,%i,%7.3f,%i\r\n", fname, start_time, end_time, total_epoch, numofepoch, total_epoch - numofepoch, 100 - (total_epoch > 0) ? (numofepoch * 100.0 / total_epoch) : (0), numofepoch_bad);
+    printf("%s\n%s\n%s\n%s\n%s\n%s\n", rtcm->staname, rtcm->antdes, rtcm->antsno, rtcm->rectype, rtcm->recver, rtcm->recsno);
     if (vObsType.size() > 0)
     {
         printf("RTCM TYPE Count\n");
@@ -267,6 +280,22 @@ static void test_rtcm(const char* fname)
             printf("%.9f,%.9f,%.4f,%.4f,%.4f,%.4f,%i\n", midBLH[0]*180/PI, midBLH[1] * 180 / PI, midBLH[2], midXYZ[0], midXYZ[1], midXYZ[2], (int)vxyz.size());
         }
         int ii = 0;
+    }
+    if (vDataGapOutput.size() > 0)
+    {
+        printf("Epoch Data GAP\n");
+        for (int i = 0; i < vDataGapOutput.size(); ++i)
+        {
+            printf("%s", vDataGapOutput[i].c_str());
+        }
+    }
+    if (vTypeGapOutput.size() > 0)
+    {
+        printf("RTCM TYPE GAP\n");
+        for (int i = 0; i < vTypeGapOutput.size(); ++i)
+        {
+            printf("%s", vTypeGapOutput[i].c_str());
+        }
     }
     if (fRTCM) fclose(fRTCM);
 }

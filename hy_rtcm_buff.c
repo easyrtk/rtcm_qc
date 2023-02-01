@@ -339,6 +339,10 @@ extern int input_rtcm3_type(rtcm_buff_t *rtcm, unsigned char data)
     {
         ret = decode_type1006_(rtcm->buff, rtcm->len, &rtcm->staid, rtcm->pos);
     }
+    if (rtcm->type == 1033)
+    {
+        ret = decode_type1033_(rtcm->buff, rtcm->len, rtcm->staname, rtcm->antdes, rtcm->antsno, rtcm->rectype, rtcm->recver, rtcm->recsno);
+    }
     /* check parity */
     if (crc24q(rtcm->buff, rtcm->len) != getbitu(rtcm->buff, rtcm->len * 8, 24)) {
         rtcm->crc = 1;
@@ -394,7 +398,7 @@ extern int update_type_1005_1006_pos(uint8_t* buff, int nbyte, double* p)
         set38bits(buff, i, p[2] / 0.0001); i += 38; /* antenna ref point ecef-z */
         if (type==1006)
         {
-        setbitu  (buff, i, 16,       0.0); i += 16; /* antenna height */
+        setbitu  (buff, i, 16,         0); i += 16; /* antenna height */
         }
         /* crc-24q */
         crc = crc24q(buff, len);
@@ -402,4 +406,52 @@ extern int update_type_1005_1006_pos(uint8_t* buff, int nbyte, double* p)
         ret = 1;
     }
     return ret;
+}
+/* decode type 1033: receiver and antenna descriptor -------------------------*/
+extern int decode_type1033_(uint8_t* buff, int len, char *staname, char* antdes, char* antsno, char* rectype, char* recver, char* recsno)
+{
+    char des[32]="",sno[32]="",rec[32]="",ver[32]="",rsn[32]="";
+    int i=24+12,j,staid,n,m,n1,n2,n3,setup;
+    
+    n =getbitu(buff,i+12,8);
+    m =getbitu(buff,i+28+8*n,8);
+    n1=getbitu(buff,i+36+8*(n+m),8);
+    n2=getbitu(buff,i+44+8*(n+m+n1),8);
+    n3=getbitu(buff,i+52+8*(n+m+n1+n2),8);
+    
+    if (i+60+8*(n+m+n1+n2+n3)<=len*8) {
+        staid=getbitu(buff,i,12); i+=12+8;
+        for (j=0;j<n&&j<31;j++) { 
+            des[j]=(char)getbitu(buff,i,8); i+=8;
+        }
+        setup=getbitu(buff,i, 8); i+=8+8;
+        for (j=0;j<m&&j<31;j++) {
+            sno[j]=(char)getbitu(buff,i,8); i+=8;
+        }
+        i+=8;
+        for (j=0;j<n1&&j<31;j++) {
+            rec[j]=(char)getbitu(buff,i,8); i+=8;
+        }
+        i+=8;
+        for (j=0;j<n2&&j<31;j++) {
+            ver[j]=(char)getbitu(buff,i,8); i+=8;
+        }
+        i+=8;
+        for (j=0;j<n3&&j<31;j++) {
+            rsn[j]=(char)getbitu(buff,i,8); i+=8;
+        }
+    }
+    else {
+        return -1;
+    }
+    
+    sprintf(staname,"%04d",staid);
+    strncpy(antdes, des,n ); antdes [n] ='\0';
+    strncpy(antsno, sno,m ); antsno [m] ='\0';
+    strncpy(rectype,rec,n1); rectype[n1]='\0';
+    strncpy(recver, ver,n2); recver [n2]='\0';
+    strncpy(recsno, rsn,n3); recsno [n3]='\0';
+    
+    //printf("rtcm3 1033: ant=%s:%s rec=%s:%s:%s\n",des,sno,rec,ver,rsn);
+    return 5;
 }
