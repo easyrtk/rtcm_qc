@@ -4,7 +4,7 @@
 #include <stdarg.h>
 #include <string.h>
 #include <stdint.h>
-#include "hy_rtcm_buff.h"
+#include "rtcm_buff.h"
 
 #define RTCM3PREAMB 0xD3        /* rtcm ver.3 frame preamble */
 
