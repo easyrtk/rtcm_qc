@@ -199,10 +199,16 @@ static void test_rtcm(const char* fname)
             if (ret == 5)
             {
                 xyz_t xyz = { 0 };
-                xyz.x = rtcm->pos[0];
-                xyz.y = rtcm->pos[1];
-                xyz.z = rtcm->pos[2];
-                vxyz.push_back(xyz);
+                if ((rtcm->pos[0] * rtcm->pos[0] + rtcm->pos[1] * rtcm->pos[1] + rtcm->pos[2] * rtcm->pos[2]) < 0.1)
+                {
+                }
+                else
+                {
+                    xyz.x = rtcm->pos[0];
+                    xyz.y = rtcm->pos[1];
+                    xyz.z = rtcm->pos[2];
+                    vxyz.push_back(xyz);
+                }
             }
             int i = 0;
             for (; i < vObsType.size(); ++i)
