@@ -32,6 +32,15 @@ typedef struct
 #define	PI 3.14159265358979
 #endif
 
+#ifndef D2R
+#define D2R (PI/180.0)
+#endif
+
+#ifndef R2D
+#define R2D (180.0/PI)
+#endif
+
+
 double lat2local(double lat, double* lat2north)
 {
     double f_WGS84 = (1.0 / finv_WGS84);
@@ -127,11 +136,80 @@ void blh2xyz_(const double* blh, double* xyz)
     xyz[2] = (Rn * (1 - e2) + ht) * sin(lat);
     return;
 }
+
+void deg2dms(double deg, double* dms)
+{
+    double sign = deg < 0.0 ? -1.0 : 1.0;
+    double a = fabs(deg);
+
+    dms[0] = floor(a); a = (a - dms[0]) * 60.0;
+    dms[1] = floor(a); a = (a - dms[1]) * 60.0;
+    dms[2] = a;
+
+    dms[0] *= sign;
+}
+
+/* output solution in the form of nmea GGA sentence */
+int outnmea_gga(unsigned char* buff, double time, int type, double lat_deg, double lon_deg, double alt, int ns, double dop, double age)
+{
+    double h, ep[6], dms1[3], dms2[3];
+    char* p = (char*)buff, * q, sum;
+
+    if (type != 1 && type != 4 && type != 5) {
+        p += sprintf(p, "$GPGGA,,,,,,,,,,,,,,");
+        for (q = (char*)buff + 1, sum = 0; *q; q++) sum ^= *q;
+        p += sprintf(p, "*%02X%c%c", sum, 0x0D, 0x0A);
+        return((int)(p - (char*)buff));
+    }
+    time -= 18.0;
+    ep[2] = floor(time / (24 * 3600));
+    time -= ep[2] * 24 * 3600.0;
+    ep[3] = floor(time / 3600);
+    time -= ep[3] * 3600;
+    ep[4] = floor(time / 60);
+    time -= ep[4] * 60;
+    ep[5] = time;
+
+    h = 0.0;
+
+    //
+    deg2dms(fabs(lat_deg), dms1);
+    deg2dms(fabs(lon_deg), dms2);
+
+    //
+    p += sprintf(p, "$GPGGA,%02.0f%02.0f%08.5f,%02.0f%010.7f,%s,%03.0f%010.7f,%s,%d,%02d,%.1f,%.3f,M,%.3f,M,%.1f",
+        ep[3], ep[4], ep[5], dms1[0], dms1[1] + dms1[2] / 60.0, lat_deg >= 0 ? "N" : "S",
+        dms2[0], dms2[1] + dms2[2] / 60.0, lon_deg >= 0 ? "E" : "W", type,
+        ns, dop, alt - h, h, age);
+
+    // Compute checksum
+    for (q = (char*)buff + 1, sum = 0; *q; q++) {
+        sum ^= *q; /* check-sum */
+    }
+
+    //
+    p += sprintf(p, "*%02X%c%c", sum, 0x0D, 0x0A);
+
+    return((int)(p - (char*)buff));
+}
+
+FILE* set_output_file(const char* fname, const char* key)
+{
+    char filename[255] = { 0 }, outfilename[255] = { 0 };
+    strcpy(filename, fname);
+    char* temp = strrchr(filename, '.');
+    if (temp) temp[0] = '\0';
+    sprintf(outfilename, "%s-%s", filename, key);
+    return fopen(outfilename, "w");
+}
+
 static void test_rtcm(const char* fname)
 {
     FILE* fRTCM = fopen(fname, "rb");
 
     if (fRTCM==NULL) return;
+
+    FILE* fGGA = set_output_file(fname, "-rtcm.nmea");
 
     int data = 0;
     rtcm_buff_t gRTCM_Buf = { 0 };
@@ -208,6 +286,14 @@ static void test_rtcm(const char* fname)
                     xyz.y = rtcm->pos[1];
                     xyz.z = rtcm->pos[2];
                     vxyz.push_back(xyz);
+                    if (fGGA)
+                    {
+                        char gga[255] = { 0 };
+                        double blh[3] = { 0 };
+                        xyz2blh_(rtcm->pos, blh);
+                        outnmea_gga((unsigned char*)gga, rtcm->tow, 1, blh[0] * R2D, blh[1] * R2D, blh[2], 10, 1.0, 0.0);
+                        fprintf(fGGA, "%s", gga);
+                    }
                 }
             }
             int i = 0;
@@ -304,6 +390,8 @@ static void test_rtcm(const char* fname)
         }
     }
     if (fRTCM) fclose(fRTCM);
+    if (fGGA) fclose(fGGA);
+    return;
 }
 
 int main(int argc, const char* argv[])

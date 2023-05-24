@@ -197,6 +197,11 @@ extern int input_rtcm3_type(rtcm_buff_t *rtcm, unsigned char data)
     if (rtcm->nbyte<rtcm->len+3) return 0;
     nbyte = rtcm->nbyte;
     rtcm->nbyte=0;
+    /* check parity */
+    if (crc24q(rtcm->buff, rtcm->len) != getbitu(rtcm->buff, rtcm->len * 8, 24)) {
+        rtcm->crc = 1;
+        return 0;
+    }
     i = 24;
     rtcm->type = getbitu(rtcm->buff, i, 12); i += 12;
     /* decode rtcm3 message */
@@ -224,6 +229,7 @@ extern int input_rtcm3_type(rtcm_buff_t *rtcm, unsigned char data)
         {
             tow -= floor((tow- rtcm->tow)/(24*1800))*(24*1800);
         }
+        tow -= floor(tow / 604800) * 604800;
         rtcm->tow   = tow;
         ret = rtcm->sync?0:1;
         is_obs = 1;
@@ -235,6 +241,7 @@ extern int input_rtcm3_type(rtcm_buff_t *rtcm, unsigned char data)
         double tow  = getbitu(rtcm->buff, i, 30) * 0.001;   i += 30;
         rtcm->sync  = getbitu(rtcm->buff,i, 1);             i +=  1;
         tow += 14.0; /* BDT -> GPST */
+        tow -= floor(tow / 604800) * 604800;
         rtcm->tow = tow;
         ret = rtcm->sync?0:1;
         is_obs = 1;
@@ -342,11 +349,6 @@ extern int input_rtcm3_type(rtcm_buff_t *rtcm, unsigned char data)
     if (rtcm->type == 1033)
     {
         ret = decode_type1033_(rtcm->buff, rtcm->len, rtcm->staname, rtcm->antdes, rtcm->antsno, rtcm->rectype, rtcm->recver, rtcm->recsno);
-    }
-    /* check parity */
-    if (crc24q(rtcm->buff, rtcm->len) != getbitu(rtcm->buff, rtcm->len * 8, 24)) {
-        rtcm->crc = 1;
-        return 0;
     }
     rtcm->slen += rtcm->len + 3;
     return ret;
