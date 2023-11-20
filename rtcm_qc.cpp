@@ -193,15 +193,24 @@ int outnmea_gga(unsigned char* buff, double time, int type, double lat_deg, doub
     return((int)(p - (char*)buff));
 }
 
-FILE* set_output_file(const char* fname, const char* key)
+FILE* set_output_file(const char* fname, const char* key, int is_binary)
 {
     char filename[255] = { 0 }, outfilename[255] = { 0 };
     strcpy(filename, fname);
     char* temp = strrchr(filename, '.');
     if (temp) temp[0] = '\0';
     sprintf(outfilename, "%s-%s", filename, key);
-    return fopen(outfilename, "w");
+    return is_binary ? fopen(outfilename, "wb") : fopen(outfilename, "w");
 }
+
+typedef struct
+{
+    int type;
+    int nsig;
+    unsigned long count;
+}sig_t;
+
+static double xyz_ref[3] = { 0 };
 
 static void test_rtcm(const char* fname)
 {
@@ -209,7 +218,8 @@ static void test_rtcm(const char* fname)
 
     if (fRTCM==NULL) return;
 
-    FILE* fGGA = set_output_file(fname, "-rtcm.nmea");
+    FILE* fGGA = set_output_file(fname, "-rtcm.nmea", 0);
+    FILE *fOUT = set_output_file(fname, "-out.rtcm3", 1);
 
     int data = 0;
     rtcm_buff_t gRTCM_Buf = { 0 };
@@ -220,15 +230,21 @@ static void test_rtcm(const char* fname)
     double lastTime = 0.0;
     std::vector< rtcm_obs_t> vObsType;
     std::vector<xyz_t> vxyz;
+    std::vector<xyz_t> vxyz_final;
 
     std::vector<std::string> vDataGapOutput;
     std::vector<std::string> vTypeGapOutput;
     double start_time =-1;
     double end_time = -1;
+    int type = 0;
+    double lastTime_4054 = 0;
+    double tow = 0;
+    double dt = 0;
     while (!feof(fRTCM))
     {
         if ((data = fgetc(fRTCM)) == EOF) break;
         int ret = input_rtcm3_type(rtcm, (unsigned char)data);
+        type = rtcm->type;
         if (rtcm->type > 0) /* rtcm data */
         {
             if (rtcm->crc == 1)
@@ -247,7 +263,19 @@ static void test_rtcm(const char* fname)
                 sec -= mm * 60;
                 //printf("%10.3f,%2i,%2i,%2i,%4i,%4i,%4i\n", rtcm->tow, hour, mm, (int)sec, rtcm->type, rtcm->nbyte, numofepoch);
             }
-            double dt = rtcm->tow - lastTime;
+            if (rtcm->type == 4054)
+            {
+                type = rtcm->subtype + rtcm->type * 1000;
+                tow = rtcm->tow_4054;
+                dt = tow - lastTime_4054;
+            }
+            else
+            {
+                type = rtcm->type;
+                tow = rtcm->tow;
+                dt = tow - lastTime;
+            }
+            printf("%8i,%10.3f\n", type, tow);
             if (ret == 1)
             {
                 if (numofepoch > 0)
@@ -291,36 +319,65 @@ static void test_rtcm(const char* fname)
                         char gga[255] = { 0 };
                         double blh[3] = { 0 };
                         xyz2blh_(rtcm->pos, blh);
-                        outnmea_gga((unsigned char*)gga, rtcm->tow, 1, blh[0] * R2D, blh[1] * R2D, blh[2], 10, 1.0, 0.0);
+                        int blen = sprintf(gga, "%04i,%14.4f,%14.4f,%14.4f,", rtcm->staid, rtcm->pos[0], rtcm->pos[1], rtcm->pos[2]);
+                        outnmea_gga((unsigned char*)gga+blen, rtcm->tow, 1, blh[0] * R2D, blh[1] * R2D, blh[2], 10, 1.0, 0.0);
                         fprintf(fGGA, "%s", gga);
+                    }
+                    int is_added = 0;
+                    if (vxyz_final.size() == 0)
+                    {
+                        is_added = 1;
+                    }
+                    else
+                    {
+                        double dxyz[3] = { xyz.x - vxyz_final.rbegin()->x, xyz.y - vxyz_final.rbegin()->y, xyz.z - vxyz_final.rbegin()->z };
+                        if (fabs(dxyz[0]) > 0.001 || fabs(dxyz[1]) > 0.001 || fabs(dxyz[2]) > 0.001)
+                        {
+                            is_added = 1;
+                            if (fOUT)
+                            {
+                                fclose(fOUT);
+                                char buffer[255] = { 0 };
+                                sprintf(buffer, "-out%03i.rtcm3", (int)vxyz_final.size());
+                                fOUT = set_output_file(fname, buffer, 1);
+                            }
+                        }
+                    }
+                    if (is_added)
+                    {
+                        printf("%14.4f%14.4f%14.4f\n", xyz.x, xyz.y, xyz.z);
+                        vxyz_final.push_back(xyz);
                     }
                 }
             }
+            /* output */
+            if (fOUT) fwrite(rtcm->buff, rtcm->len + 3, sizeof(char), fOUT);
+
             int i = 0;
             for (; i < vObsType.size(); ++i)
             {
-                if (vObsType[i].type == rtcm->type)
+                if (vObsType[i].type == type)
                 {
                     if (vObsType[i].numofepoch > 0)
                     {
-                        double dt = rtcm->tow - vObsType[i].time;
-                        if (dt > 1.5 && rtcm_obs_type(rtcm->type))
+                        dt = tow - vObsType[i].time;
+                        if (dt > 1.5 && (rtcm_obs_type(rtcm->type)||rtcm->type==4054))
                         {
                             char temp[255] = { 0 };
-                            sprintf(temp, "%10.3f,%10.3f,%6i,%4i\r\n", rtcm->tow, dt, vObsType[i].numofepoch, rtcm->type);
+                            sprintf(temp, "%10.3f,%10.3f,%6i,%4i\r\n", tow, dt, vObsType[i].numofepoch, type);
                             vTypeGapOutput.push_back(temp);
                         }
                     }
                     vObsType[i].numofepoch++;
-                    vObsType[i].time = rtcm->tow;
+                    vObsType[i].time = tow;
                     break;
                 }
             }
             if (i == vObsType.size())
             {
                 rtcm_obs_t temp = { 0 };
-                temp.type = rtcm->type;
-                temp.time = rtcm->tow;
+                temp.type = type;
+                temp.time = tow;
                 temp.numofepoch = 1;
                 vObsType.push_back(temp);
             }
@@ -328,8 +385,8 @@ static void test_rtcm(const char* fname)
     }
     if (end_time < start_time) end_time += 7 * 24 * 3600;
     int total_epoch = (int)(end_time - start_time + 1);
-    printf("rtcm stats for %s,%10.3f,%10.3f,%i,%i,%i,%7.3f,%i\r\n", fname, start_time, end_time, total_epoch, numofepoch, total_epoch - numofepoch, 100 - (total_epoch > 0) ? (numofepoch * 100.0 / total_epoch) : (0), numofepoch_bad);
-    printf("%s\n%s\n%s\n%s\n%s\n%s\n", rtcm->staname, rtcm->antdes, rtcm->antsno, rtcm->rectype, rtcm->recver, rtcm->recsno);
+    //printf("rtcm stats for %s,%10.3f,%10.3f,%i,%i,%i,%7.3f,%i\r\n", fname, start_time, end_time, total_epoch, numofepoch, total_epoch - numofepoch, 100 - (total_epoch > 0) ? (numofepoch * 100.0 / total_epoch) : (0), numofepoch_bad);
+    //printf("%s\n%s\n%s\n%s\n%s\n%s\n", rtcm->staname, rtcm->antdes, rtcm->antsno, rtcm->rectype, rtcm->recver, rtcm->recsno);
     if (vObsType.size() > 0)
     {
         printf("RTCM TYPE Count\n");
@@ -371,6 +428,17 @@ static void test_rtcm(const char* fname)
         {
             printf("%.9f,%.9f,%.4f,%.4f,%.4f,%.4f,%i\n", midBLH[0]*180/PI, midBLH[1] * 180 / PI, midBLH[2], midXYZ[0], midXYZ[1], midXYZ[2], (int)vxyz.size());
         }
+        if (fabs(xyz_ref[0]) > 0.0 || fabs(xyz_ref[1]) > 0.0 || fabs(xyz_ref[2]) > 0.0)
+        {
+            FILE* fDIF = fopen("coord-dif.csv", "w");
+            for (int i = 0; i < vxyz.size(); ++i)
+            {
+                double dxyz[3] = { vxyz[i].x - xyz_ref[0] , vxyz[i].y - xyz_ref[1] , vxyz[i].z - xyz_ref[2] };
+                double dist = sqrt(dxyz[0] * dxyz[0] + dxyz[1] * dxyz[1] + dxyz[2] * dxyz[2]);
+                fprintf(fDIF, "%.4f,%.4f,%.4f,%.4f,%i\n", dxyz[0], dxyz[1], dxyz[2], dist, dist > 5.0 ? 1 : 0);
+            }
+            if (fDIF) fclose(fDIF);
+        }
         int ii = 0;
     }
     if (vDataGapOutput.size() > 0)
@@ -391,13 +459,24 @@ static void test_rtcm(const char* fname)
     }
     if (fRTCM) fclose(fRTCM);
     if (fGGA) fclose(fGGA);
+    if (fOUT) fclose(fOUT);
     return;
 }
 
 int main(int argc, const char* argv[])
 {
-    if (argc>1)
+    //test_rtcm("E:\\cmc_new\\rtcmCheck_231119\\rtcmCheck_SH2\\rtkUser_SH\\JSHN\\VRS_JSHN-2023-11-19-08-23-27.bin");
+    //return 0;
+    if (argc > 1)
+    {
+        if (argc > 4)
+        {
+            xyz_ref[0] = atof(argv[2]);
+            xyz_ref[1] = atof(argv[3]);
+            xyz_ref[2] = atof(argv[4]);
+        }
         test_rtcm(argv[1]);
+    }
     return 0;
 }
 

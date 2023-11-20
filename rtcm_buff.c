@@ -43,7 +43,7 @@ static const unsigned int tbl_CRC24Q[]={
     0x42FA2F,0xC4B6D4,0xC82F22,0x4E63D9,0xD11CCE,0x575035,0x5BC9C3,0xDD8538
 };
 
-static unsigned int crc24q(const unsigned char *buff, int len)
+extern unsigned int crc24q_(const unsigned char *buff, int len)
 {
     unsigned int crc=0;
     int i;
@@ -52,7 +52,7 @@ static unsigned int crc24q(const unsigned char *buff, int len)
     return crc;
 }
 
-static void setbitu(unsigned char *buff, int pos, int len, unsigned int data)
+extern void setbitu_(unsigned char *buff, int pos, int len, unsigned int data)
 {
     unsigned int mask=1u<<(len-1);
     int i;
@@ -61,36 +61,36 @@ static void setbitu(unsigned char *buff, int pos, int len, unsigned int data)
         if (data&mask) buff[i/8]|=1u<<(7-i%8); else buff[i/8]&=~(1u<<(7-i%8));
     }
 }
-extern void setbits(uint8_t *buff, int pos, int len, int32_t data)
+extern void setbits_(uint8_t *buff, int pos, int len, int32_t data)
 {
     if (data<0) data|=1<<(len-1); else data&=~(1<<(len-1)); /* set sign bit */
-    setbitu(buff,pos,len,(uint32_t)data);
+    setbitu_(buff,pos,len,(uint32_t)data);
 }
 /* set signed 38 bit field ---------------------------------------------------*/
-static void set38bits(uint8_t *buff, int pos, double value)
+extern void set38bits_(uint8_t *buff, int pos, double value)
 {
     int word_h=(int)floor(value/64.0);
     uint32_t word_l=(uint32_t)(value-word_h*64.0);
-    setbits(buff,pos  ,32,word_h);
-    setbitu(buff,pos+32,6,word_l);
+    setbits_(buff,pos  ,32,word_h);
+    setbitu_(buff,pos+32,6,word_l);
 }
-static unsigned int getbitu(const unsigned char *buff, int pos, int len)
+extern unsigned int getbitu_(const unsigned char *buff, int pos, int len)
 {
     unsigned int bits=0;
     int i;
     for (i=pos;i<pos+len;i++) bits=(bits<<1)+((buff[i/8]>>(7-i%8))&1u);
     return bits;
 }
-static int getbits(const unsigned char *buff, int pos, int len)
+extern int getbits_(const unsigned char *buff, int pos, int len)
 {
-    unsigned int bits=getbitu(buff,pos,len);
+    unsigned int bits=getbitu_(buff,pos,len);
     if (len<=0||32<=len||!(bits&(1u<<(len-1)))) return (int)bits;
     return (int)(bits|(~0u<<len)); /* extend sign */
 }
 /* get signed 38bit field ----------------------------------------------------*/
-static double getbits_38(const unsigned char *buff, int pos)
+extern double getbits_38_(const unsigned char *buff, int pos)
 {
-    return (double)getbits(buff,pos,32)*64.0+getbitu(buff,pos+32,6);
+    return (double)getbits_(buff,pos,32)*64.0+getbitu_(buff,pos+32,6);
 }
 /* decode type 1005: stationary rtk reference station arp --------------------*/
 extern int decode_type1005_(unsigned char *buff, int len, int *staid, double *pos)
@@ -99,11 +99,11 @@ extern int decode_type1005_(unsigned char *buff, int len, int *staid, double *po
     int i=24+12,j/*,staid,itrf*/;
     
     if (i+140<=len*8) {
-        *staid=getbitu(buff,i,12); i+=12;
-        /*itrf =getbitu(buff,i, 6);*/ i+= 6+4;
-        rr[0]=getbits_38(buff,i); i+=38+2;
-        rr[1]=getbits_38(buff,i); i+=38+2;
-        rr[2]=getbits_38(buff,i);
+        *staid=getbitu_(buff,i,12); i+=12;
+        /*itrf =getbitu_(buff,i, 6);*/ i+= 6+4;
+        rr[0]=getbits_38_(buff,i); i+=38+2;
+        rr[1]=getbits_38_(buff,i); i+=38+2;
+        rr[2]=getbits_38_(buff,i);
     }
     else {
         return -1;
@@ -121,12 +121,12 @@ extern int decode_type1006_(unsigned char *buff, int len, int *staid, double *po
     int i=24+12,j/*,staid,itrf*/;
     
     if (i+156<=len*8) {
-        *staid=getbitu(buff,i,12); i+=12;
-        /*itrf =getbitu(buff,i, 6);*/ i+= 6+4;
-        rr[0]=getbits_38(buff,i); i+=38+2;
-        rr[1]=getbits_38(buff,i); i+=38+2;
-        rr[2]=getbits_38(buff,i); i+=38;
-        /*anth =getbitu(buff,i,16);*/
+        *staid=getbitu_(buff,i,12); i+=12;
+        /*itrf =getbitu_(buff,i, 6);*/ i+= 6+4;
+        rr[0]=getbits_38_(buff,i); i+=38+2;
+        rr[1]=getbits_38_(buff,i); i+=38+2;
+        rr[2]=getbits_38_(buff,i); i+=38;
+        /*anth =getbitu_(buff,i,16);*/
     }
     else {
         return -1;
@@ -137,7 +137,7 @@ extern int decode_type1006_(unsigned char *buff, int len, int *staid, double *po
     }
     return 5;
 }
-static int add_rtcm_to_buff(rtcm_buff_t* rtcm, unsigned char data)
+extern int add_rtcm_to_buff(rtcm_buff_t* rtcm, unsigned char data)
 {
     if (rtcm->sync == 0) rtcm->slen = 0;
     rtcm->type=0;
@@ -150,39 +150,7 @@ static int add_rtcm_to_buff(rtcm_buff_t* rtcm, unsigned char data)
         rtcm->buff[rtcm->nbyte++]=data;
         return 0;
     }
-#if 1
     rtcm->buff[rtcm->nbyte++] = data;
-#else
-    if (rtcm->mark)
-    {
-        if (data == 0xEE)
-        {
-            rtcm->buff[rtcm->nbyte++] = 0x11;
-        }
-        else if (data == 0xEC)
-        {
-            rtcm->buff[rtcm->nbyte++] = 0x13;
-        }
-        else if (data == 0x88)
-        {
-            rtcm->buff[rtcm->nbyte++] = 0x77;
-        }
-        else if ((rtcm->nbyte+2) < MAX_RTCM_BUF_LEN)
-        {
-            rtcm->buff[rtcm->nbyte++] = 0x77;
-            rtcm->buff[rtcm->nbyte++] = data;
-        }
-        rtcm->mark = 0;
-    }
-    else if (data == 0x77)
-    {
-        rtcm->mark = 1;
-    }
-    else
-    {
-        rtcm->buff[rtcm->nbyte++] = data;
-    }
-#endif
     return 1;
 }
 
@@ -193,17 +161,17 @@ extern int input_rtcm3_type(rtcm_buff_t *rtcm, unsigned char data)
     if (add_rtcm_to_buff(rtcm, data) == 0) return 0;
     
     if (rtcm->nbyte < 3) return 0;
-    rtcm->len=getbitu(rtcm->buff,14,10)+3; /* length without parity */
+    rtcm->len=getbitu_(rtcm->buff,14,10)+3; /* length without parity */
     if (rtcm->nbyte<rtcm->len+3) return 0;
     nbyte = rtcm->nbyte;
     rtcm->nbyte=0;
     /* check parity */
-    if (crc24q(rtcm->buff, rtcm->len) != getbitu(rtcm->buff, rtcm->len * 8, 24)) {
+    if (crc24q_(rtcm->buff, rtcm->len) != getbitu_(rtcm->buff, rtcm->len * 8, 24)) {
         rtcm->crc = 1;
         return 0;
     }
     i = 24;
-    rtcm->type = getbitu(rtcm->buff, i, 12); i += 12;
+    rtcm->type = getbitu_(rtcm->buff, i, 12); i += 12;
     /* decode rtcm3 message */
     if ((rtcm->type == 1074 || rtcm->type == 1075 || rtcm->type == 1076 || rtcm->type == 1077)|| /* GPS */
         (rtcm->type == 1094 || rtcm->type == 1095 || rtcm->type == 1096 || rtcm->type == 1097)|| /* GAL */
@@ -211,19 +179,19 @@ extern int input_rtcm3_type(rtcm_buff_t *rtcm, unsigned char data)
         (rtcm->type == 1114 || rtcm->type == 1115 || rtcm->type == 1116 || rtcm->type == 1117))   /* QZS */
     {
         /* GPS, GAL, SBS, QZS */
-        rtcm->staid = getbitu(rtcm->buff, i, 12);           i += 12;
-        rtcm->tow   = getbitu(rtcm->buff, i, 30) * 0.001;   i += 30;
-        rtcm->sync  = getbitu(rtcm->buff, i,  1);           i +=  1;
+        rtcm->staid = getbitu_(rtcm->buff, i, 12);           i += 12;
+        rtcm->tow   = getbitu_(rtcm->buff, i, 30) * 0.001;   i += 30;
+        rtcm->sync  = getbitu_(rtcm->buff, i,  1);           i +=  1;
         ret = rtcm->sync?0:1;
         is_obs = 1;
     }
     if (rtcm->type == 1084 || rtcm->type == 1085 || rtcm->type == 1086 || rtcm->type == 1087)
     {
         /* GLO */
-        rtcm->staid = getbitu(rtcm->buff, i, 12);           i += 12;
-        double dow  = getbitu(rtcm->buff, i,  3);           i +=  3;
-        double tod  = getbitu(rtcm->buff, i, 27) * 0.001;   i += 27;
-        rtcm->sync  = getbitu(rtcm->buff, i,  1);           i +=  1;
+        rtcm->staid = getbitu_(rtcm->buff, i, 12);           i += 12;
+        double dow  = getbitu_(rtcm->buff, i,  3);           i +=  3;
+        double tod  = getbitu_(rtcm->buff, i, 27) * 0.001;   i += 27;
+        rtcm->sync  = getbitu_(rtcm->buff, i,  1);           i +=  1;
         double tow  = dow * 24 * 3600 + tod - 3 * 3600 + 18;
         if (rtcm->tow>0.0&&fabs(tow- rtcm->tow)>(24*1800))
         {
@@ -237,9 +205,9 @@ extern int input_rtcm3_type(rtcm_buff_t *rtcm, unsigned char data)
     if (rtcm->type == 1124 || rtcm->type == 1125 || rtcm->type == 1126 || rtcm->type == 1127)
     {
         /* BDS */
-        rtcm->staid = getbitu(rtcm->buff, i, 12);           i += 12;
-        double tow  = getbitu(rtcm->buff, i, 30) * 0.001;   i += 30;
-        rtcm->sync  = getbitu(rtcm->buff,i, 1);             i +=  1;
+        rtcm->staid = getbitu_(rtcm->buff, i, 12);           i += 12;
+        double tow  = getbitu_(rtcm->buff, i, 30) * 0.001;   i += 30;
+        rtcm->sync  = getbitu_(rtcm->buff,i, 1);             i +=  1;
         tow += 14.0; /* BDT -> GPST */
         tow -= floor(tow / 604800) * 604800;
         rtcm->tow = tow;
@@ -261,11 +229,11 @@ extern int input_rtcm3_type(rtcm_buff_t *rtcm, unsigned char data)
         /* smooth */   i += 1;
         /* tint_s */   i += 3;
         for (j = 1; j <= 64; j++) {
-            mask = getbitu(rtcm->buff, i, 1); i += 1;
+            mask = getbitu_(rtcm->buff, i, 1); i += 1;
             if (mask) rtcm->sats[rtcm->nsat++] = j;
         }
         for (j = 1; j <= 32; j++) {
-            mask = getbitu(rtcm->buff, i, 1); i += 1;
+            mask = getbitu_(rtcm->buff, i, 1); i += 1;
             if (mask) rtcm->sigs[rtcm->nsig++] = j;
         }
         if (i + rtcm->nsat * rtcm->nsig > rtcm->len * 8) {
@@ -275,10 +243,17 @@ extern int input_rtcm3_type(rtcm_buff_t *rtcm, unsigned char data)
         else
         {
             for (j = 0; j < rtcm->nsat * rtcm->nsig; j++) {
-                rtcm->cels[j] = getbitu(rtcm->buff, i, 1); i += 1;
+                rtcm->cels[j] = getbitu_(rtcm->buff, i, 1); i += 1;
                 if (rtcm->cels[j]) rtcm->ncel++;
             }
         }
+		//printf("%10.3f,%4i,%4i,%4i,%4i,%4i,%4i", rtcm->tow, rtcm->type, nbyte, rtcm->len + 3, rtcm->ncel, rtcm->nsat, rtcm->nsig);
+        //for (j = 0; j < rtcm->nsig; ++j)
+        ///{
+        //    printf(",%2i", rtcm->sigs[j]);
+        //}
+        //printf("\n");
+
 #if 0 //_WIN32
         printf("%10.3f,%4i,%4i,%4i,%4i,%4i,%4i,SAT:", rtcm->tow, rtcm->type, nbyte, rtcm->len + 3, rtcm->nsat, rtcm->nsig, rtcm->ncel);
         for (j = 0; j < 64; ++j)
@@ -305,37 +280,37 @@ extern int input_rtcm3_type(rtcm_buff_t *rtcm, unsigned char data)
     }
     if (rtcm->type == 1019)
     {
-        int prn   =getbitu(rtcm->buff,i, 6);              i+= 6;
-        int week  =getbitu(rtcm->buff,i,10);              i+=10;
+        int prn   =getbitu_(rtcm->buff,i, 6);              i+= 6;
+        int week  =getbitu_(rtcm->buff,i,10);              i+=10;
         rtcm->wk  =week+2048;
         rtcm->sys = 'G';
         rtcm->prn = prn;
     }
     if (rtcm->type == 1020)
     {
-        int prn   =getbitu(rtcm->buff,i, 6);              i+= 6;
-        int frq   =getbitu(rtcm->buff,i, 5)-7;            i+= 5+2+2;
+        int prn   =getbitu_(rtcm->buff,i, 6);              i+= 6;
+        int frq   =getbitu_(rtcm->buff,i, 5)-7;            i+= 5+2+2;
         rtcm->sys = 'R';
         rtcm->prn = prn;
     }
     if (rtcm->type == 1042)
     {
-        int prn   =getbitu(rtcm->buff,i, 6);              i+= 6;
-        int week  =getbitu(rtcm->buff,i,13);              i+=13;
+        int prn   =getbitu_(rtcm->buff,i, 6);              i+= 6;
+        int week  =getbitu_(rtcm->buff,i,13);              i+=13;
         rtcm->wk  =week+1356; /* BDT week to GPS week */
     }
     if (rtcm->type == 1044)
     {
-        int prn   =getbitu(rtcm->buff,i, 4);              i+= 4+430;
-        int week  =getbitu(rtcm->buff,i,10);              i+=10;
+        int prn   =getbitu_(rtcm->buff,i, 4);              i+= 4+430;
+        int week  =getbitu_(rtcm->buff,i,10);              i+=10;
         rtcm->wk  =week+2048;
         rtcm->sys = 'J';
         rtcm->prn = prn;
     }		
     if (rtcm->type == 1045|| rtcm->type == 1046)
     {
-        int prn   =getbitu(rtcm->buff,i, 6);              i+= 6;
-        int week  =getbitu(rtcm->buff,i,12);              i+=12; /* gst-week */
+        int prn   =getbitu_(rtcm->buff,i, 6);              i+= 6;
+        int week  =getbitu_(rtcm->buff,i,12);              i+=12; /* gst-week */
         rtcm->wk  =week+1024 ; /* gal-week = gst-week + 1024 */
     }
     if (rtcm->type == 1005)
@@ -349,6 +324,18 @@ extern int input_rtcm3_type(rtcm_buff_t *rtcm, unsigned char data)
     if (rtcm->type == 1033)
     {
         ret = decode_type1033_(rtcm->buff, rtcm->len, rtcm->staname, rtcm->antdes, rtcm->antsno, rtcm->rectype, rtcm->recver, rtcm->recsno);
+    }
+    if (rtcm->type == 4054)
+    {
+        i = 0;
+        i += 8;
+        i += 6;
+        i += 10;
+        int type = getbitu_(rtcm->buff, i, 12); i += 12; /* message type */
+        int ver = getbitu_(rtcm->buff, i, 2); i += 2; /* version */
+        rtcm->subtype = getbitu_(rtcm->buff, i, 9); i += 9; /* subtype */
+        rtcm->tow_4054 = getbitu_(rtcm->buff, i, 20); i += 20; /* time */
+        int sync = getbitu_(rtcm->buff, i, 1); i += 1; /* sync */
     }
     rtcm->slen += rtcm->len + 3;
     return ret;
@@ -377,11 +364,11 @@ extern int update_type_1005_1006_pos(uint8_t* buff, int nbyte, double* p)
     int crc = 0;
     int ret = 0;
     if (buff[0] != RTCM3PREAMB || nbyte < 6) return ret;
-    len = getbitu(buff, 14, 10) + 3; /* length without parity */
+    len = getbitu_(buff, 14, 10) + 3; /* length without parity */
     if (nbyte < (len + 3)) return ret;
 
     i = 24; /* type */
-    type = getbitu(buff, i, 12); i += 12;
+    type = getbitu_(buff, i, 12); i += 12;
 
     if (type == 1005 || type == 1006)
     {
@@ -392,19 +379,19 @@ extern int update_type_1005_1006_pos(uint8_t* buff, int nbyte, double* p)
         i += 1; /* glonass indicator */
         i += 1; /* galileo indicator */
         i += 1; /* ref station indicator */
-        set38bits(buff, i, p[0] / 0.0001); i += 38; /* antenna ref point ecef-x */
+        set38bits_(buff, i, p[0] / 0.0001); i += 38; /* antenna ref point ecef-x */
         i += 1; /* oscillator indicator */
         i += 1; /* reserved */
-        set38bits(buff, i, p[1] / 0.0001); i += 38; /* antenna ref point ecef-y */
+        set38bits_(buff, i, p[1] / 0.0001); i += 38; /* antenna ref point ecef-y */
         i += 2; /* quarter cycle indicator */
-        set38bits(buff, i, p[2] / 0.0001); i += 38; /* antenna ref point ecef-z */
+        set38bits_(buff, i, p[2] / 0.0001); i += 38; /* antenna ref point ecef-z */
         if (type==1006)
         {
-        setbitu  (buff, i, 16,         0); i += 16; /* antenna height */
+        setbitu_  (buff, i, 16,         0); i += 16; /* antenna height */
         }
         /* crc-24q */
-        crc = crc24q(buff, len);
-        setbitu(buff, len * 8, 24, crc);
+        crc = crc24q_(buff, len);
+        setbitu_(buff, len * 8, 24, crc);
         ret = 1;
     }
     return ret;
@@ -415,32 +402,32 @@ extern int decode_type1033_(uint8_t* buff, int len, char *staname, char* antdes,
     char des[32]="",sno[32]="",rec[32]="",ver[32]="",rsn[32]="";
     int i=24+12,j,staid,n,m,n1,n2,n3,setup;
     
-    n =getbitu(buff,i+12,8);
-    m =getbitu(buff,i+28+8*n,8);
-    n1=getbitu(buff,i+36+8*(n+m),8);
-    n2=getbitu(buff,i+44+8*(n+m+n1),8);
-    n3=getbitu(buff,i+52+8*(n+m+n1+n2),8);
+    n =getbitu_(buff,i+12,8);
+    m =getbitu_(buff,i+28+8*n,8);
+    n1=getbitu_(buff,i+36+8*(n+m),8);
+    n2=getbitu_(buff,i+44+8*(n+m+n1),8);
+    n3=getbitu_(buff,i+52+8*(n+m+n1+n2),8);
     
     if (i+60+8*(n+m+n1+n2+n3)<=len*8) {
-        staid=getbitu(buff,i,12); i+=12+8;
+        staid=getbitu_(buff,i,12); i+=12+8;
         for (j=0;j<n&&j<31;j++) { 
-            des[j]=(char)getbitu(buff,i,8); i+=8;
+            des[j]=(char)getbitu_(buff,i,8); i+=8;
         }
-        setup=getbitu(buff,i, 8); i+=8+8;
+        setup=getbitu_(buff,i, 8); i+=8+8;
         for (j=0;j<m&&j<31;j++) {
-            sno[j]=(char)getbitu(buff,i,8); i+=8;
+            sno[j]=(char)getbitu_(buff,i,8); i+=8;
         }
         i+=8;
         for (j=0;j<n1&&j<31;j++) {
-            rec[j]=(char)getbitu(buff,i,8); i+=8;
+            rec[j]=(char)getbitu_(buff,i,8); i+=8;
         }
         i+=8;
         for (j=0;j<n2&&j<31;j++) {
-            ver[j]=(char)getbitu(buff,i,8); i+=8;
+            ver[j]=(char)getbitu_(buff,i,8); i+=8;
         }
         i+=8;
         for (j=0;j<n3&&j<31;j++) {
-            rsn[j]=(char)getbitu(buff,i,8); i+=8;
+            rsn[j]=(char)getbitu_(buff,i,8); i+=8;
         }
     }
     else {
@@ -457,3 +444,4 @@ extern int decode_type1033_(uint8_t* buff, int len, char *staname, char* antdes,
     //printf("rtcm3 1033: ant=%s:%s rec=%s:%s:%s\n",des,sno,rec,ver,rsn);
     return 5;
 }
+

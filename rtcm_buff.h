@@ -1,9 +1,11 @@
-#ifndef _HY_RTCM_BUFF_H
-#define _HY_RTCM_BUFF_H
+#ifndef _RTCM_BUFF_H
+#define _RTCM_BUFF_H
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#include <stdint.h>
 
 #define MAX_RTCM_BUF_LEN 1200
 
@@ -35,6 +37,8 @@ typedef struct {        /* RTCM control struct type */
     int mark;
     unsigned char sys;         /* update satellite of ephemeris */
     unsigned char prn;
+    double tow_4054;
+    int subtype;
 } rtcm_buff_t;
 
 int input_rtcm3_type(rtcm_buff_t* rtcm, unsigned char data);
