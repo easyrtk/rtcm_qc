@@ -463,6 +463,57 @@ static void test_rtcm(const char* fname)
     return;
 }
 
+static void test_rtcm1(const char* fname)
+{
+    FILE* fRTCM = fopen(fname, "rb");
+
+    if (fRTCM == NULL) return;
+
+    FILE* fOUT = set_output_file(fname, "-out.rtcm3", 1);
+
+    int data = 0;
+    rtcm_buff_t gRTCM_Buf = { 0 };
+    rtcm_buff_t* rtcm = &gRTCM_Buf;
+    unsigned long numofepoch = 0;
+    int numofseg = 0;
+    double last__tow = 0;
+    while (!feof(fRTCM))
+    {
+        if ((data = fgetc(fRTCM)) == EOF) break;
+        int ret = input_rtcm3_type(rtcm, (unsigned char)data);
+        if (rtcm->crc == 1 || rtcm->type == 0) continue;
+        if (ret == 1)
+        {
+            if (numofepoch > 0)
+            {
+                int idx_pre_seg = floor(rtcm->tow / (2 * 3600.0));
+                int idx_cur_seg = floor(last__tow / (2 * 3600.0));
+                if (idx_pre_seg != idx_cur_seg)
+                {
+                    if (fOUT)
+                    {
+                        fclose(fOUT);
+                        char buffer[255] = { 0 };
+                        int day = floor(rtcm->tow / (24 * 3600.0));
+                        int hh = floor(rtcm->tow / (3600.0));
+                        hh %= 24;
+                        sprintf(buffer, "-out-%03i-%02i-%02i.rtcm3", numofseg, day, hh);
+                        fOUT = set_output_file(fname, buffer, 1);
+                    }
+                    ++numofseg;
+                }
+            }
+            ++numofepoch;
+            last__tow = rtcm->tow;
+        }
+        /* output */
+        if (fOUT) fwrite(rtcm->buff, rtcm->len + 3, sizeof(char), fOUT);
+    }
+    if (fRTCM) fclose(fRTCM);
+    if (fOUT) fclose(fOUT);
+    return;
+}
+
 int main(int argc, const char* argv[])
 {
     //test_rtcm("E:\\cmc_new\\rtcmCheck_231119\\rtcmCheck_SH2\\rtkUser_SH\\JSHN\\VRS_JSHN-2023-11-19-08-23-27.bin");
@@ -475,7 +526,7 @@ int main(int argc, const char* argv[])
             xyz_ref[1] = atof(argv[3]);
             xyz_ref[2] = atof(argv[4]);
         }
-        test_rtcm(argv[1]);
+        test_rtcm1(argv[1]);
     }
     return 0;
 }
